@@ -5,165 +5,266 @@
 
 #define WIDTH 900.0
 #define HEIGHT 600.0
-#define PARTICLE_WIDTH 8
-#define PARTICLE_HEIGHT 8
+#define PARTICLE_WIDTH 1
+#define PARTICLE_HEIGHT 1
 #define COLOR 0xffffffff
+#define PARTICLE_COUNT 75
 
 int isRunning = 1;
 int down = 0;
 double deltat = 0.25;
 
 typedef struct _vector {
-    double dx;
-    double dy;
+	double doublex;
+	double doubley;
 } vector;
 
 typedef struct _particle {
-    double x;
-    double y;
-    double prevx;
-    double prevy;
-    double mass;
+	double x;
+	double y;
+	double prevx;
+	double prevy;
+	double mass;
+	int pinned;
 } particle;
 
 typedef struct _fibre {
-    particle p1;
-    particle p2;
-    double length;
+	particle* p1;
+	particle* p2;
+	double length;
 } fibre;
 
-particle p_arr[4];
-fibre f_arr[4];
+particle p_arr[PARTICLE_COUNT][PARTICLE_COUNT];
+fibre f_arr_h[PARTICLE_COUNT * (PARTICLE_COUNT - 1)];
+fibre f_arr_v[PARTICLE_COUNT * (PARTICLE_COUNT - 1)];
+
+int mx, my, prev_mx, prev_my;
+double cursor_size = 25.0;
 
 
-double 
+int
+selected(particle p) {
+
+	vector cursor_to_point_direction = { p.x - (double)mx, p.y - (double)my };
+	double cursor_to_position_distance = cursor_to_point_direction.doublex * cursor_to_point_direction.doublex +
+		cursor_to_point_direction.doubley * cursor_to_point_direction.doubley;
+	return (cursor_to_position_distance < cursor_size* cursor_size);
+}
+
+double
 distance(particle p1, particle p2) {
-    double dx = p1.x - p2.x;
-    double dy = p1.y - p2.y;
-    return sqrt((dx * dx) + (dy * dy));
+	double dx = p1.x - p2.x;
+	double dy = p1.y - p2.y;
+	return sqrt((dx * dx) + (dy * dy));
 }
 
 void
 keepitinside(particle* p) {
-    vector vel = { p->x - p->prevx, p->y - p->prevy };
+	vector vel = { p->x - p->prevx, p->y - p->prevy };
 
-    if (p->x > WIDTH - PARTICLE_WIDTH) { p->x = WIDTH - PARTICLE_WIDTH; p->prevx = p->x + vel.dx; }
-    if (p->x < 0.0) { p->x = 0.0; p->prevx = p->x + vel.dx; }
-    if (p->y > HEIGHT - PARTICLE_HEIGHT) { p->y = HEIGHT - PARTICLE_HEIGHT; p->prevy = p->y + vel.dy; }
-    if (p->y < 0.0) { p->y = 0.0; p->prevy = p->y + vel.dy; }
+	if (p->x > WIDTH - PARTICLE_WIDTH) { p->x = WIDTH - PARTICLE_WIDTH; p->prevx = p->x; }
+	if (p->x < 0.0) { p->x = 0.0; p->prevx = p->x; }
+	if (p->y > HEIGHT - PARTICLE_HEIGHT) { p->y = HEIGHT - PARTICLE_HEIGHT; p->prevy = p->y; }
+	if (p->y < 0.0) { p->y = 0.0; p->prevy = p->y; }
 }
 
-void 
-render(SDL_Renderer* pRenderer) { 
-    SDL_SetRenderDrawColor(pRenderer, 0, 0, 0, 255); // Black background
-    SDL_RenderClear(pRenderer);
+void
+render(SDL_Renderer* pRenderer) {
+	SDL_SetRenderDrawColor(pRenderer, 0, 0, 0, 255); // black background
+	SDL_RenderClear(pRenderer);
 
 
-    SDL_SetRenderDrawColor(pRenderer, 255, 255, 255, 255); // White particles
-    for (int i = 0; i < 4; i++) {
-        SDL_Rect pixel = (SDL_Rect){ (int)p_arr[i].x, (int)p_arr[i].y, PARTICLE_WIDTH, PARTICLE_HEIGHT };
-        SDL_RenderFillRect(pRenderer, &pixel);
-    }
+	SDL_SetRenderDrawColor(pRenderer, 255, 255, 255, 255); // white particles (not existing anymore)
+	for (int i = 0; i < PARTICLE_COUNT; i++) {
+		for (int j = 0; j < PARTICLE_COUNT; j++) {
+			// SDL_Rect pixel = (SDL_Rect){ (int)p_arr[i][j].x, (int)p_arr[i][j].y, PARTICLE_WIDTH, PARTICLE_HEIGHT };
+			// SDL_RenderFillRect(pRenderer, &pixel);
+			SDL_RenderDrawPoint(pRenderer, (int)p_arr[i][j].x, (int)p_arr[i][j].y);
+		}
+	}
 
-    SDL_SetRenderDrawColor(pRenderer, 0, 255, 0, 255); // Green fibres
-    for (int i = 0; i < 4; i++) {
-        SDL_RenderDrawLine(pRenderer, (int)f_arr[i].p1.x, (int)f_arr[i].p1.y, (int)f_arr[i].p2.x, (int)f_arr[i].p2.y);
-    }
+	SDL_SetRenderDrawColor(pRenderer, 0, 255, 0, 255); // green fibres
+	for (int i = 0; i < PARTICLE_COUNT * (PARTICLE_COUNT - 1); i++) {
+		SDL_RenderDrawLine(pRenderer, (int)f_arr_h[i].p1->x, (int)f_arr_h[i].p1->y, (int)f_arr_h[i].p2->x, (int)f_arr_h[i].p2->y);
+	}
+
+	for (int i = 0; i < PARTICLE_COUNT * (PARTICLE_COUNT - 1); i++) {
+		SDL_RenderDrawLine(pRenderer, (int)f_arr_v[i].p1->x, (int)f_arr_v[i].p1->y, (int)f_arr_v[i].p2->x, (int)f_arr_v[i].p2->y);
+	}
 }
 
-void 
+void
 update() {
-    for (int i = 0; i < 4; i++) {
-        particle p = p_arr[i];
+	for (int i = 0; i < PARTICLE_COUNT; i++) {
+		for (int j = 0; j < PARTICLE_COUNT; j++) {
+			particle p = p_arr[i][j];
 
-        vector force = { 0.25, 0.5 };
-        vector acceleration = { force.dx / p.mass, force.dy / p.mass };
+			if (p.pinned) continue;
 
-        vector temp = { p.x, p.y };
+			vector force = { 0.0, 4.9 };
+			vector acceleration = { force.doublex / p.mass, force.doubley / p.mass };
 
-        p.x = p.x + (p.x - p.prevx) + acceleration.dx * (deltat * deltat);
-        p.y = p.y + (p.y - p.prevy) + acceleration.dy * (deltat * deltat);
+			// Dragging mechanism
+			// Verlet step: new position = current position + implicit velocity + acceleration
+			// Because we modified prevx/prevy during dragging, the velocity term (x - prevx)
+			// now contains the mouse motion, so the particle is carried along with the cursor.
+			if (down && selected(p)) {
+				double elasticity = 10.0;
+				double stiffness = 0.5;
+				vector difference = { (double)(mx - prev_mx), (double)(my - prev_my) };
+				if (difference.doublex > elasticity) difference.doublex = elasticity;
+				if (difference.doubley > elasticity) difference.doubley = elasticity;
+				if (difference.doublex < -elasticity) difference.doublex = -elasticity;
+				if (difference.doubley < -elasticity) difference.doubley = -elasticity;
 
-        p.prevx = temp.dx;
-        p.prevy = temp.dy;
+				p.prevx = p.x - difference.doublex * stiffness;
+				p.prevy = p.y - difference.doubley * stiffness;
+			}
 
-        keepitinside(&p);
-        p_arr[i] = p;
-    }
+			vector temp = { p.x, p.y };
+
+			p.x = p.x + (p.x - p.prevx) + acceleration.doublex * (deltat * deltat);
+			p.y = p.y + (p.y - p.prevy) + acceleration.doubley * (deltat * deltat);
+
+			p.prevx = temp.doublex;
+			p.prevy = temp.doubley;
+
+			keepitinside(&p);
+			p_arr[i][j] = p;
+		}
+	}
+
+	// fibres must store *pointers* to particles, not copies 
+	// otherwise constraint solver moves fake copies instead of real ones
+	// for (int k = 0; k < 5; k++) { // repeat solver iterations
+	for (int i = 0; i < PARTICLE_COUNT * (PARTICLE_COUNT - 1); i++) {
+		double dx = f_arr_h[i].p2->x - f_arr_h[i].p1->x;
+		double dy = f_arr_h[i].p2->y - f_arr_h[i].p1->y;
+
+		double dist = sqrt(dx * dx + dy * dy);
+		double diff = f_arr_h[i].length - dist;
+		double percent = (diff / dist) / 2.0;
+
+		double offsetx = dx * percent;
+		double offsety = dy * percent;
+
+		if (!f_arr_h[i].p1->pinned) {
+			f_arr_h[i].p1->x -= offsetx;
+			f_arr_h[i].p1->y -= offsety;
+		}
+
+		if (!f_arr_h[i].p2->pinned) {
+			f_arr_h[i].p2->x += offsetx;
+			f_arr_h[i].p2->y += offsety;
+		}
+	}
+
+	for (int i = 0; i < PARTICLE_COUNT * (PARTICLE_COUNT - 1); i++) {
+		double dx = f_arr_v[i].p2->x - f_arr_v[i].p1->x;
+		double dy = f_arr_v[i].p2->y - f_arr_v[i].p1->y;
+
+		double dist = sqrt(dx * dx + dy * dy);
+		double diff = f_arr_v[i].length - dist;
+		double percent = (diff / dist) / 2.0;
+
+		double offsetx = dx * percent;
+		double offsety = dy * percent;
+
+		if (!f_arr_v[i].p1->pinned) {
+			f_arr_v[i].p1->x -= offsetx;
+			f_arr_v[i].p1->y -= offsety;
+		}
+
+		if (!f_arr_v[i].p2->pinned) {
+			f_arr_v[i].p2->x += offsetx;
+			f_arr_v[i].p2->y += offsety;
+		}
+	}
+	// }
 }
 
 void
 setup() {
-    p_arr[0].x = 220;
-    p_arr[0].y = 20;
+	for (int i = 0; i < PARTICLE_COUNT; i++) {
+		for (int j = 0; j < PARTICLE_COUNT; j++) {
+			particle p = p_arr[i][j];
+			p.x = WIDTH / 4.0 + (j * WIDTH / (2 * PARTICLE_COUNT));
+			p.y = 50 + i * 5;
 
-    p_arr[1].x = 280;
-    p_arr[1].y = 20;
+			p.prevx = p.x;
+			p.prevy = p.y;
+			p.mass = 19.6;
 
-    p_arr[2].x = 280;
-    p_arr[2].y = 60;
+			// if (i == 0) p.pinned = 1;
+			// else p.pinned = 0;
 
-    p_arr[3].x = 220;
-    p_arr[3].y = 60;
+			p_arr[i][j] = p;
+		}
+	}
+	p_arr[0][0].pinned = 1;
+	p_arr[0][PARTICLE_COUNT / 4].pinned = 1;
+	p_arr[0][PARTICLE_COUNT / 2].pinned = 1;
+	p_arr[0][3 * PARTICLE_COUNT / 4].pinned = 1;
+	p_arr[0][PARTICLE_COUNT - 1].pinned = 1;
 
-    for (int i = 0; i < 4; i++) {
-        p_arr[i].prevx = p_arr[i].x;
-        p_arr[i].prevy = p_arr[i].y;
-        p_arr[i].mass = 10000.0;
-    }
-
-    f_arr[0].p1 = p_arr[0];
-    f_arr[0].p2 = p_arr[1];
-    f_arr[0].length = distance(p_arr[0], p_arr[1]);
-
-    f_arr[1].p1 = p_arr[1];
-    f_arr[1].p2 = p_arr[2];
-    f_arr[1].length = distance(p_arr[1], p_arr[2]);
-
-    f_arr[2].p1 = p_arr[2];
-    f_arr[2].p2 = p_arr[3];
-    f_arr[2].length = distance(p_arr[2], p_arr[3]);
-
-    f_arr[3].p1 = p_arr[3];
-    f_arr[3].p2 = p_arr[0];
-    f_arr[3].length = distance(p_arr[3], p_arr[0]);
+	for (int i = 0; i < PARTICLE_COUNT; i++) {
+		for (int j = 0; j < PARTICLE_COUNT - 1; j++) {
+			int l = i * (PARTICLE_COUNT - 1) + j;
+			f_arr_h[l].p1 = &p_arr[i][j];
+			f_arr_h[l].p2 = &p_arr[i][j + 1];
+			f_arr_h[l].length = distance(p_arr[i][j], p_arr[i][j + 1]);
+		}
+	}
+	for (int i = 0; i < PARTICLE_COUNT - 1; i++) {
+		for (int j = 0; j < PARTICLE_COUNT; j++) {
+			int l = i * PARTICLE_COUNT + j;
+			f_arr_v[l].p1 = &p_arr[i][j];
+			f_arr_v[l].p2 = &p_arr[i + 1][j];
+			f_arr_v[l].length = distance(p_arr[i][j], p_arr[i + 1][j]);
+		}
+	}
 }
 
 int
 main() {
-    printf("Hello Humans!");
+	printf("Hello Humans!");
 
-    SDL_Init(SDL_INIT_VIDEO);
-    
-    SDL_Window* pWindow = SDL_CreateWindow("Cloth Simulation", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
+	SDL_Init(SDL_INIT_VIDEO);
 
-    // Create a SDL renderer
-    SDL_Renderer* pRenderer = SDL_CreateRenderer(pWindow, -1, 0);
+	SDL_Window* pWindow = SDL_CreateWindow("Cloth Simulation", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
 
-    setup();
+	// Create a SDL renderer
+	SDL_Renderer* pRenderer = SDL_CreateRenderer(pWindow, -1, 0);
 
-    while (isRunning) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {  // poll until all events are handled in a single frame before moving to next frame
-            if (event.type == SDL_QUIT) isRunning = 0;
-            else if (event.type == SDL_KEYDOWN) {
-                if (event.key.keysym.sym == SDLK_ESCAPE) isRunning = 0;
-            }
-            else if (event.type == SDL_MOUSEBUTTONDOWN) down = 1;
-            else if (event.type == SDL_MOUSEBUTTONUP) down = 0;
-            else if (event.type == SDL_MOUSEMOTION) {
-                if (down) {
-                    int mx, my;
-                    SDL_GetMouseState(&mx, &my);
-                }
-            }
-        }
+	setup();
 
-        update();
-        render(pRenderer);
-        SDL_RenderPresent(pRenderer);
-        // SDL_Delay(25);
-    }
+	while (isRunning) {
+		SDL_Event event;
+		while (SDL_PollEvent(&event)) {  // poll until all events are handled in a single frame before moving to next frame
+			prev_mx = mx;
+			prev_my = my;
+			SDL_GetMouseState(&mx, &my);
 
-    return 0;
+			if (event.type == SDL_QUIT) isRunning = 0;
+			else if (event.type == SDL_KEYDOWN) {
+				if (event.key.keysym.sym == SDLK_ESCAPE) isRunning = 0;
+			}
+			else if (event.type == SDL_MOUSEBUTTONDOWN) down = 1;
+			else if (event.type == SDL_MOUSEBUTTONUP) down = 0;
+			else if (event.type == SDL_MOUSEMOTION) {
+				//if (down) {
+				//prev_mx = mx;
+				//prev_my = my;
+					//SDL_GetMouseState(&mx, &my);
+				//}
+			}
+		}
+
+		update();
+		render(pRenderer);
+		SDL_RenderPresent(pRenderer);
+		// SDL_Delay(25);
+	}
+
+	return 0;
 }
