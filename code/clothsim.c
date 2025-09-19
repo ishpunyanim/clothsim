@@ -31,6 +31,7 @@ typedef struct _particle {
 typedef struct _fibre {
 	particle* p1;
 	particle* p2;
+	int broken;
 	double length;
 } fibre;
 
@@ -40,7 +41,7 @@ fibre f_arr_v[PARTICLE_COUNT * (PARTICLE_COUNT - 1)];
 
 int mx, my, prev_mx, prev_my;
 double cursor_size = 25.0;
-
+Uint32 button;
 
 int
 selected(particle p) {
@@ -83,13 +84,13 @@ render(SDL_Renderer* pRenderer) {
 		}
 	}
 
-	SDL_SetRenderDrawColor(pRenderer, 0, 255, 0, 255); // green fibres
+	SDL_SetRenderDrawColor(pRenderer, 0, 140, 100, 255); // colored fibres
 	for (int i = 0; i < PARTICLE_COUNT * (PARTICLE_COUNT - 1); i++) {
-		SDL_RenderDrawLine(pRenderer, (int)f_arr_h[i].p1->x, (int)f_arr_h[i].p1->y, (int)f_arr_h[i].p2->x, (int)f_arr_h[i].p2->y);
+		if (!f_arr_h[i].broken) SDL_RenderDrawLine(pRenderer, (int)f_arr_h[i].p1->x, (int)f_arr_h[i].p1->y, (int)f_arr_h[i].p2->x, (int)f_arr_h[i].p2->y);
 	}
 
 	for (int i = 0; i < PARTICLE_COUNT * (PARTICLE_COUNT - 1); i++) {
-		SDL_RenderDrawLine(pRenderer, (int)f_arr_v[i].p1->x, (int)f_arr_v[i].p1->y, (int)f_arr_v[i].p2->x, (int)f_arr_v[i].p2->y);
+		if (!f_arr_v[i].broken) SDL_RenderDrawLine(pRenderer, (int)f_arr_v[i].p1->x, (int)f_arr_v[i].p1->y, (int)f_arr_v[i].p2->x, (int)f_arr_v[i].p2->y);
 	}
 }
 
@@ -101,7 +102,7 @@ update() {
 
 			if (p.pinned) continue;
 
-			vector force = { 0.0, 4.9 };
+			vector force = { 4.9, 4.9 };
 			vector acceleration = { force.doublex / p.mass, force.doubley / p.mass };
 
 			// Dragging mechanism
@@ -138,6 +139,13 @@ update() {
 	// otherwise constraint solver moves fake copies instead of real ones
 	// for (int k = 0; k < 5; k++) { // repeat solver iterations
 	for (int i = 0; i < PARTICLE_COUNT * (PARTICLE_COUNT - 1); i++) {
+		if (f_arr_h[i].broken) continue; // skip already broken fibre
+
+		if (down && button == SDL_BUTTON_RIGHT && (selected(*f_arr_h[i].p1) || selected(*f_arr_h[i].p2))) {
+			f_arr_h[i].broken = 1; 
+			continue; 
+		} 
+
 		double dx = f_arr_h[i].p2->x - f_arr_h[i].p1->x;
 		double dy = f_arr_h[i].p2->y - f_arr_h[i].p1->y;
 
@@ -148,18 +156,25 @@ update() {
 		double offsetx = dx * percent;
 		double offsety = dy * percent;
 
-		if (!f_arr_h[i].p1->pinned) {
+		if (!f_arr_h[i].p1->pinned && !f_arr_h[i].broken) {
 			f_arr_h[i].p1->x -= offsetx;
 			f_arr_h[i].p1->y -= offsety;
 		}
 
-		if (!f_arr_h[i].p2->pinned) {
+		if (!f_arr_h[i].p2->pinned && !f_arr_h[i].broken) {
 			f_arr_h[i].p2->x += offsetx;
 			f_arr_h[i].p2->y += offsety;
 		}
 	}
 
 	for (int i = 0; i < PARTICLE_COUNT * (PARTICLE_COUNT - 1); i++) {
+		if (f_arr_v[i].broken) continue; // skip already broken fibre
+
+		if (down && button == SDL_BUTTON_RIGHT && (selected(*f_arr_v[i].p1) || selected(*f_arr_v[i].p2))) {
+			f_arr_v[i].broken = 1;
+			continue;
+		}
+
 		double dx = f_arr_v[i].p2->x - f_arr_v[i].p1->x;
 		double dy = f_arr_v[i].p2->y - f_arr_v[i].p1->y;
 
@@ -170,12 +185,12 @@ update() {
 		double offsetx = dx * percent;
 		double offsety = dy * percent;
 
-		if (!f_arr_v[i].p1->pinned) {
+		if (!f_arr_v[i].p1->pinned && !f_arr_v[i].broken) {
 			f_arr_v[i].p1->x -= offsetx;
 			f_arr_v[i].p1->y -= offsety;
 		}
 
-		if (!f_arr_v[i].p2->pinned) {
+		if (!f_arr_v[i].p2->pinned && !f_arr_v[i].broken) {
 			f_arr_v[i].p2->x += offsetx;
 			f_arr_v[i].p2->y += offsety;
 		}
@@ -249,15 +264,11 @@ main() {
 			else if (event.type == SDL_KEYDOWN) {
 				if (event.key.keysym.sym == SDLK_ESCAPE) isRunning = 0;
 			}
-			else if (event.type == SDL_MOUSEBUTTONDOWN) down = 1;
-			else if (event.type == SDL_MOUSEBUTTONUP) down = 0;
-			else if (event.type == SDL_MOUSEMOTION) {
-				//if (down) {
-				//prev_mx = mx;
-				//prev_my = my;
-					//SDL_GetMouseState(&mx, &my);
-				//}
+			else if (event.type == SDL_MOUSEBUTTONDOWN) {
+				down = 1;
+				button = event.button.button;
 			}
+			else if (event.type == SDL_MOUSEBUTTONUP) down = 0;
 		}
 
 		update();
