@@ -17,7 +17,7 @@ Basic mouse interaction allows tearing or dragging particles.
 ## 📸 Demo
 
 ![Cloth Simulation Demo](image.png)
-
+![Cloth Simulation Demo](image.png)
 ![Cloth Simulation in Action](latest-clothsim.mp4)
 
 ---
