@@ -13,6 +13,15 @@ Basic mouse interaction allows tearing or dragging particles.
 
 ---
 
+
+## 📸 Demo
+
+![Cloth Simulation Demo](images/demo.png)
+
+![Cloth Simulation in Action](images/demo.gif)
+
+---
+
 ## Features
 
 * Mass–spring system with configurable grid size and stiffness
