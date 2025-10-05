@@ -7,18 +7,19 @@ This project explores basic physics modeling, numerical integration, and constra
 
 ## Overview
 
-This simulation models the cloth as a 2D grid of particles connected by structural, shear, and bend springs.
-Each frame computes spring forces, gravity, and damping, then integrates the positions using a semi-implicit Euler method.
-Basic mouse interaction allows tearing or dragging particles.
+This simulation models a grid-based cloth model using **Verlet integration** for particle motion. Each vertex (particle) stores its current and previous positions, with velocity implicitly encoded in their difference. Fibres act as distance constraints, maintaining rest lengths between adjacent nodes through positional correction. Constraint breaking enables cloth tearing by removing links in the 2D grid.
+
+Pinned particles enforce boundary conditions, anchoring the mesh. **Gravitational and Wind force** is modeled as a constant acceleration, while mouse interaction injects external forces by modifying historical positions. A simple projection solver enforces constraints, distributing error between connected nodes.
+
+Particles are clamped to the simulation bounds to prevent escape, and rendering is performed with **SDL2** immediate primitives, drawing fibres as line segments and vertices as points. The result is a lightweight, position-based dynamics system that is stable, extensible, and visually demonstrative of cloth-like behavior.
 
 ---
 
-
-## 📸 Demo
+## Demo
 
 ![Cloth Simulation Demo](image.png)
 
-Cloth Simulation in Action : https://files.catbox.moe/7es63y.mp4
+Cloth Simulation in action on my website : https://m16.neocities.org/clothsim
 
 ---
 
